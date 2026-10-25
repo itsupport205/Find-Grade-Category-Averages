@@ -11,8 +11,8 @@
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Google API & Identity Services Libraries -->
-  <script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
-  <script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js" async defer></script>
   <style>
     @media print {
       .no-print { display: none !important; }
@@ -20,9 +20,6 @@
     }
     .badge-A { background-color: #dcfce7; color: #166534; border: 1px solid #86efac; }
     .badge-B { background-color: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
-    .badge-C { background-color: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
-    .badge-D { background-color: #ffedd5; color: #9a3412; border: 1px solid #fdba74; }
-    .badge-F { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
   </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans text-slate-800 flex flex-col">
@@ -40,7 +37,7 @@
         </div>
       </div>
 
-      <!-- Sign In / Sign Out Buttons -->
+      <!-- Auth Buttons -->
       <div class="flex items-center gap-3">
         <div id="authStatus" class="flex items-center">
           <button id="loginBtn" onclick="handleAuthClick()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm px-4 py-2 rounded-md shadow transition flex items-center gap-2">
@@ -53,6 +50,17 @@
       </div>
     </div>
   </header>
+
+  <!-- Popup Warning Banner -->
+  <div id="popupAlert" class="hidden max-w-7xl mx-auto px-4 mt-4 no-print">
+    <div class="bg-amber-100 border-l-4 border-amber-500 text-amber-900 p-4 rounded shadow-sm flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-triangle-exclamation text-amber-600"></i>
+        <span class="text-sm font-medium">Pop-up blocked! Please click the icon in your browser address bar to allow pop-ups for this site, then try signing in again.</span>
+      </div>
+      <button onclick="document.getElementById('popupAlert').classList.add('hidden')" class="text-xs font-bold uppercase tracking-wider text-amber-700 hover:underline">Dismiss</button>
+    </div>
+  </div>
 
   <!-- Main Content Area -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
@@ -85,13 +93,11 @@
     <!-- Loading Spinner -->
     <div id="loadingSpinner" class="hidden py-16 text-center">
       <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-      <p id="spinnerText" class="mt-4 text-sm font-medium text-slate-600">Fetching courses, coursework, and student submissions...</p>
+      <p id="spinnerText" class="mt-4 text-sm font-medium text-slate-600">Fetching Google Classroom Data...</p>
     </div>
 
     <!-- Results Dashboard -->
     <div id="dashboardResults" class="hidden space-y-8">
-      
-      <!-- Class Overview Summary Cards -->
       <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Course Name</div>
@@ -106,310 +112,96 @@
           <div id="summaryCategoryCount" class="text-2xl font-bold text-emerald-600 mt-1">0</div>
         </div>
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Class Overall Average</div>
-          <div id="summaryClassOverall" class="text-2xl font-bold text-purple-600 mt-1">-%</div>
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</div>
+          <div id="summaryClassOverall" class="text-2xl font-bold text-purple-600 mt-1">Active</div>
         </div>
       </section>
 
-      <!-- Category Summary Cards -->
       <section>
         <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
           <i class="fa-solid fa-layer-group text-indigo-600"></i> Category Summary Averages
         </h2>
-        <div id="categoryCardsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <!-- Dynamic Category Cards -->
-        </div>
+        <div id="categoryCardsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
       </section>
 
-      <!-- Student Grade Matrix Section -->
       <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <i class="fa-solid fa-users text-indigo-600"></i> Student Category Grade Matrix
-            </h2>
-            <p class="text-xs text-slate-500 mt-1">Individual student performance for each grade category</p>
-          </div>
+        <div class="p-6 border-b border-slate-100">
+          <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-users text-indigo-600"></i> Student Category Grade Matrix
+          </h2>
         </div>
-
-        <!-- Matrix Table -->
         <div class="overflow-x-auto">
           <table class="w-full text-sm text-left text-slate-600">
             <thead class="text-xs text-slate-700 uppercase bg-slate-50 border-b border-slate-200">
               <tr id="matrixHeaderRow">
                 <th scope="col" class="px-6 py-4">Student Name</th>
-                <th scope="col" class="px-6 py-4 text-center">Overall Grade</th>
+                <th scope="col" class="px-6 py-4 text-center">Status</th>
               </tr>
             </thead>
-            <tbody id="matrixTableBody" class="divide-y divide-slate-200">
-              <!-- Dynamic Rows -->
-            </tbody>
+            <tbody id="matrixTableBody" class="divide-y divide-slate-200"></tbody>
           </table>
         </div>
       </section>
 
-      <!-- Visual Charts Section -->
       <section class="grid grid-cols-1 lg:grid-cols-2 gap-6 no-print">
         <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <h3 class="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-            <i class="fa-solid fa-chart-column text-indigo-600"></i> Category Class Averages
-          </h3>
-          <div class="relative h-64">
-            <canvas id="categoryChart"></canvas>
-          </div>
+          <h3 class="text-sm font-bold text-slate-700 mb-4">Category Weight Allocation</h3>
+          <div class="relative h-64"><canvas id="categoryChart"></canvas></div>
         </div>
         <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <h3 class="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-            <i class="fa-solid fa-pie-chart text-indigo-600"></i> Category Weight Allocation
-          </h3>
-          <div class="relative h-64">
-            <canvas id="weightChart"></canvas>
-          </div>
+          <h3 class="text-sm font-bold text-slate-700 mb-4">Distribution Overview</h3>
+          <div class="relative h-64"><canvas id="weightChart"></canvas></div>
         </div>
       </section>
-
     </div>
   </main>
 
-  <!-- JavaScript Application Logic -->
   <script>
     const HARDCODED_CLIENT_ID = '1036380348780-g9im8k30a4ptqknhu8j96nmrh766j86b.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly';
+    const SCOPES = 'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly https://www.googleapis.com/auth/classroom.rosters.readonly';
     
-    let tokenClient;
-    let gapiInited = false;
-    let gsiInited = false;
+    let tokenClient = null;
     let categoryChartInstance = null;
     let weightChartInstance = null;
-    let currentMatrixExportData = [];
 
-    function gapiLoaded() {
-      gapi.load('client', async () => {
-        await gapi.client.init({
-          discoveryDocs: ["https://classroom.googleapis.com/$discovery/rest?version=v1"],
-        });
-        gapiInited = true;
-      });
-    }
-
-    function gisLoaded() {
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: HARDCODED_CLIENT_ID,
-        scope: SCOPES,
-        callback: async (resp) => {
-          if (resp.error) {
-            alert("Google Sign-In Error: " + resp.error);
-            return;
-          }
-          document.getElementById('loginBtn').classList.add('hidden');
-          document.getElementById('logoutBtn').classList.remove('hidden');
-          await listCourses();
-        },
-      });
-      gsiInited = true;
-    }
-
+    // Direct Auth Execution
     function handleAuthClick() {
-      if (!gsiInited || !gapiInited) {
-        alert("Google libraries are still loading. Please wait 3 seconds and click Sign In again.");
-        return;
-      }
-      try {
-        if (gapi.client.getToken() === null) {
-          tokenClient.requestAccessToken({prompt: 'consent'});
-        } else {
-          tokenClient.requestAccessToken({prompt: ''});
-        }
-      } catch (e) {
-        console.error(e);
-        alert("Could not trigger sign-in popup. Please check if your browser blocked popups for this site.");
-      }
-    }
+      document.getElementById('popupAlert').classList.add('hidden');
 
-    function handleSignoutClick() {
-      const token = gapi.client.getToken();
-      if (token !== null) {
-        google.accounts.oauth2.revoke(token.access_token);
-        gapi.client.setToken('');
-        document.getElementById('loginBtn').classList.remove('hidden');
-        document.getElementById('logoutBtn').classList.add('hidden');
-        document.getElementById('courseSelect').innerHTML = '<option value="">-- Sign in with Google to view courses --</option>';
-        document.getElementById('dashboardResults').classList.add('hidden');
-      }
-    }
-
-    async function listCourses() {
-      document.getElementById('loadingSpinner').classList.remove('hidden');
-      document.getElementById('spinnerText').innerText = "Loading Google Classroom courses...";
-      try {
-        const response = await gapi.client.classroom.courses.list({
-          courseStates: 'ACTIVE',
-          teacherId: 'me'
-        });
-        const courses = response.result.courses;
-        const select = document.getElementById('courseSelect');
-        
-        select.innerHTML = '<option value="">-- Select a Course --</option>';
-
-        if (courses && courses.length > 0) {
-          courses.forEach(c => {
-            const option = document.createElement('option');
-            option.value = c.id;
-            option.textContent = c.name + (c.section ? ' (' + c.section + ')' : '');
-            select.appendChild(option);
-          });
-        } else {
-          select.innerHTML = '<option value="">No active courses found as teacher.</option>';
-        }
-      } catch (err) {
-        console.error("Error listing courses:", err);
-        alert("Error loading courses. Please ensure your Google Classroom API is enabled in Google Cloud Console.");
-      }
-      document.getElementById('loadingSpinner').classList.add('hidden');
-    }
-
-    async function calculateGrades() {
-      const select = document.getElementById('courseSelect');
-      const courseId = select.value;
-
-      if (!courseId || courseId === "") {
-        alert('Please select a valid course from the list.');
+      if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+        alert("Google Sign-In libraries are still loading. Please wait 3 seconds and click again.");
         return;
       }
 
-      document.getElementById('loadingSpinner').classList.remove('hidden');
-      document.getElementById('spinnerText').innerText = "Fetching course categories, students, and assignment submissions...";
-      document.getElementById('dashboardResults').classList.add('hidden');
+      // Initialize Client dynamically if not ready
+      if (!tokenClient) {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: HARDCODED_CLIENT_ID,
+          scope: SCOPES,
+          callback: async (resp) => {
+            if (resp.error) {
+              alert("Google Auth Error: " + resp.error);
+              return;
+            }
+            document.getElementById('loginBtn').classList.add('hidden');
+            document.getElementById('logoutBtn').classList.remove('hidden');
+            await initGapiAndLoadCourses();
+          },
+        });
+      }
 
       try {
-        // 1. Get Course Settings (to read Grade Categories)
-        const courseRes = await gapi.client.classroom.courses.get({ id: courseId });
-        const course = courseRes.result;
-        const categories = course.gradebookSettings?.gradeCategories || [];
-
-        // 2. Fetch Students
-        const studentsRes = await gapi.client.classroom.courses.students.list({ courseId: courseId });
-        const students = studentsRes.result.students || [];
-
-        // 3. Fetch Coursework
-        const workRes = await gapi.client.classroom.courses.courseWork.list({ courseId: courseId });
-        const coursework = workRes.result.courseWork || [];
-
-        renderDashboardResults(course, categories, students, coursework);
+        // Request access token with forced consent prompt
+        tokenClient.requestAccessToken({ prompt: 'select_account consent' });
       } catch (err) {
-        console.error("Error calculating grades:", err);
-        alert("Could not load full classroom grades. Ensure you have teacher permissions for this course.");
+        console.error("Popup trigger error:", err);
+        document.getElementById('popupAlert').classList.remove('hidden');
       }
-
-      document.getElementById('loadingSpinner').classList.add('hidden');
     }
 
-    function renderDashboardResults(course, categories, students, coursework) {
-      document.getElementById('dashboardResults').classList.remove('hidden');
-      document.getElementById('exportCsvBtn').classList.remove('hidden');
-      document.getElementById('exportCsvBtn').classList.add('flex');
+    async function initGapiAndLoadCourses() {
+      document.getElementById('loadingSpinner').classList.remove('hidden');
+      document.getElementById('spinnerText').innerText = "Initializing Google Classroom Connection...";
 
-      document.getElementById('summaryCourseName').innerText = course.name;
-      document.getElementById('summaryStudentCount').innerText = students.length;
-      document.getElementById('summaryCategoryCount').innerText = categories.length;
-
-      // Category Summary Cards
-      const cardsGrid = document.getElementById('categoryCardsGrid');
-      cardsGrid.innerHTML = '';
-
-      if (categories.length === 0) {
-        cardsGrid.innerHTML = `
-          <div class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-amber-800 text-xs col-span-3">
-            <i class="fa-solid fa-circle-info mr-1"></i> No explicit grade categories were configured in Google Classroom settings for this course. Displaying default assignment metrics.
-          </div>
-        `;
-      } else {
-        categories.forEach(cat => {
-          const weightPercent = cat.weight ? (cat.weight / 10000) : 0;
-          cardsGrid.innerHTML += `
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
-              <div class="flex justify-between items-start mb-2">
-                <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100">Weight: ${weightPercent}%</span>
-              </div>
-              <h3 class="text-base font-bold text-slate-800">${cat.name}</h3>
-              <p class="text-xs text-slate-400 mt-1">Configured Grade Category</p>
-            </div>
-          `;
-        });
-      }
-
-      // Matrix Table Headers
-      const headerRow = document.getElementById('matrixHeaderRow');
-      headerRow.innerHTML = `<th scope="col" class="px-6 py-4">Student Name</th>`;
-
-      if (categories.length === 0) {
-        headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">Uncategorized Coursework</th>`;
-      } else {
-        categories.forEach(cat => {
-          const weight = cat.weight ? ` (${cat.weight/10000}%)` : '';
-          headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">${cat.name}${weight}</th>`;
-        });
-      }
-      headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">Overall</th>`;
-
-      // Matrix Rows
-      const tbody = document.getElementById('matrixTableBody');
-      tbody.innerHTML = '';
-
-      students.forEach(s => {
-        let rowHtml = `<td class="px-6 py-4 font-semibold text-slate-800">${s.profile.name.fullName}</td>`;
-        
-        if (categories.length === 0) {
-          rowHtml += `<td class="px-6 py-4 text-center font-medium">--</td>`;
-        } else {
-          categories.forEach(() => {
-            rowHtml += `<td class="px-6 py-4 text-center font-medium">--</td>`;
-          });
-        }
-        
-        rowHtml += `<td class="px-6 py-4 text-center"><span class="px-3 py-1 text-xs font-bold rounded-full border badge-B">Active</span></td>`;
-        tbody.innerHTML += `<tr>${rowHtml}</tr>`;
-      });
-
-      document.getElementById('summaryClassOverall').innerText = 'Active';
-      renderCharts(categories);
-    }
-
-    function renderCharts(categories) {
-      if(categoryChartInstance) categoryChartInstance.destroy();
-      if(weightChartInstance) weightChartInstance.destroy();
-
-      const labels = categories.length > 0 ? categories.map(c => c.name) : ['General Coursework'];
-      const weights = categories.length > 0 ? categories.map(c => c.weight ? c.weight/10000 : 100) : [100];
-
-      const ctx1 = document.getElementById('categoryChart').getContext('2d');
-      categoryChartInstance = new Chart(ctx1, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Category Average (%)',
-            data: weights.map(() => Math.floor(Math.random() * 15) + 80),
-            backgroundColor: '#6366f1'
-          }]
-        },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100, min: 0 } } }
-      });
-
-      const ctx2 = document.getElementById('weightChart').getContext('2d');
-      weightChartInstance = new Chart(ctx2, {
-        type: 'doughnut',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: weights,
-            backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6']
-          }]
-        },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
-    }
-
-    function exportCategoryMatrixCSV() {
-      let csv = "Student Name,Status\n";
-      const
+      if (!gapi.client) {
+        await new Promise((resolve) => gapi.load('client
