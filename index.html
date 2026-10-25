@@ -4,164 +4,163 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Google Classroom Grade Category Calculator</title>
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Google API Libraries -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="https://apis.google.com/js/api.js" async defer></script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
+  <script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
   <style>
-    @media print {
-      .no-print { display: none !important; }
-      .print-only { display: block !important; }
-      body { background: white; color: black; }
-    }
     .badge-A { background-color: #dcfce7; color: #166534; border-color: #86efac; }
     .badge-B { background-color: #dbeafe; color: #1e40af; border-color: #93c5fd; }
-    .badge-C { background-color: #fef9c3; color: #854d0e; border-color: #fde047; }
-    .badge-D { background-color: #ffedd5; color: #9a3412; border-color: #fdba74; }
-    .badge-F { background-color: #fee2e2; color: #991b1b; border-color: #fca5a5; }
   </style>
 </head>
 <body class="bg-slate-50 min-h-screen font-sans text-slate-800 flex flex-col">
 
-  <!-- Header -->
-  <header class="bg-indigo-700 text-white shadow-md no-print">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+  <header class="bg-indigo-700 text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
       <div class="flex items-center space-x-3">
-        <div class="bg-white p-2 rounded-lg text-indigo-700 shadow-inner">
-          <i class="fa-solid fa-graduation-cap text-2xl"></i>
-        </div>
-        <div>
-          <h1 class="text-xl font-bold tracking-tight">Classroom Grade Category Calculator</h1>
-          <p class="text-xs text-indigo-200">Google Classroom Category & Student Matrix Analytics</p>
-        </div>
+        <i class="fa-solid fa-graduation-cap text-2xl"></i>
+        <h1 class="text-xl font-bold">Classroom Grade Category Calculator</h1>
       </div>
-
-      <!-- Settings / Auth Bar -->
-      <div class="flex items-center gap-3">
-        <div id="authStatus" class="flex items-center">
-          <button id="loginBtn" onclick="handleAuthClick()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm px-4 py-2 rounded-md shadow transition flex items-center gap-2">
-            <i class="fa-brands fa-google"></i> Sign in with Google
-          </button>
-          <button id="logoutBtn" onclick="handleSignoutClick()" class="hidden bg-slate-600 hover:bg-slate-700 text-white font-medium text-sm px-4 py-2 rounded-md shadow transition flex items-center gap-2">
-            <i class="fa-solid fa-right-from-bracket"></i> Sign Out
-          </button>
-        </div>
+      <div>
+        <button id="loginBtn" onclick="handleAuthClick()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm px-4 py-2 rounded-md shadow transition flex items-center gap-2">
+          <i class="fa-brands fa-google"></i> Sign in with Google
+        </button>
+        <button id="logoutBtn" onclick="handleSignoutClick()" class="hidden bg-slate-600 hover:bg-slate-700 text-white font-medium text-sm px-4 py-2 rounded-md shadow transition">
+          Sign Out
+        </button>
       </div>
     </div>
   </header>
 
-  <!-- Main Content Container -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
-
-    <!-- Demo Mode Banner (Hidden when Client ID exists) -->
-    <div id="demoBanner" class="hidden mb-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-md shadow-sm no-print flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-      <div class="flex items-center space-x-3">
-        <i class="fa-solid fa-flask text-amber-600 text-xl"></i>
-        <div>
-          <h3 class="font-semibold text-amber-900 text-sm">Demo / Simulated Mode Active</h3>
-          <p class="text-xs text-amber-700">Please sign in with Google above to calculate live grades.</p>
+  <main class="max-w-7xl mx-auto px-4 py-8 flex-grow w-full">
+    <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex-grow w-full max-w-xl">
+          <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Select Google Classroom Course</label>
+          <select id="courseSelect" class="w-full bg-slate-50 border border-slate-300 text-sm rounded-lg p-3">
+            <option value="">-- Sign in with Google to view courses --</option>
+          </select>
         </div>
-      </div>
-    </div>
-
-    <!-- Course Selection Toolbar -->
-    <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8 no-print">
-      <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        <div class="flex-grow max-w-xl">
-          <label for="courseSelect" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Select Google Classroom Course</label>
-          <div class="relative">
-            <select id="courseSelect" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 p-3 pr-8 appearance-none shadow-sm cursor-pointer">
-              <option value="">-- Sign in with Google to view courses --</option>
-            </select>
-            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
-              <i class="fa-solid fa-chevron-down text-xs"></i>
-            </div>
-          </div>
-        </div>
-        <div class="flex items-end gap-3">
-          <button id="calcBtn" onclick="calculateGrades()" class="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-3 rounded-lg shadow-sm transition flex items-center justify-center gap-2 text-sm">
-            <i class="fa-solid fa-calculator"></i> Calculate Category Averages
-          </button>
-          <button id="exportCsvBtn" onclick="exportCategoryMatrixCSV()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-3 rounded-lg shadow-sm transition items-center gap-2 text-sm">
-            <i class="fa-solid fa-file-csv"></i> Export Matrix CSV
-          </button>
-        </div>
+        <button id="calcBtn" onclick="calculateGrades()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-3 rounded-lg shadow-sm text-sm">
+          <i class="fa-solid fa-calculator"></i> Calculate Category Averages
+        </button>
       </div>
     </section>
 
-    <!-- Loading Spinner -->
     <div id="loadingSpinner" class="hidden py-16 text-center">
       <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-      <p class="mt-4 text-sm font-medium text-slate-600">Fetching courses, coursework, and student submissions...</p>
+      <p class="mt-4 text-sm font-medium text-slate-600">Loading Google Classroom Data...</p>
     </div>
 
-    <!-- Results Dashboard -->
     <div id="dashboardResults" class="hidden space-y-8">
+      <div class="bg-white p-6 rounded-xl border border-slate-200">
+        <h2 id="summaryCourseName" class="text-xl font-bold text-slate-800">Course Overview</h2>
+        <p class="text-sm text-slate-500 mt-1">Select a course to analyze grade categories and student averages.</p>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const HARDCODED_CLIENT_ID = '1036380348780-g9im8k30a4ptqknhu8j96nmrh766j86b.apps.googleusercontent.com';
+    const SCOPES = 'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.coursework.students.readonly';
+    
+    let tokenClient;
+    let gapiInited = false;
+    let gsiInited = false;
+
+    function gapiLoaded() {
+      gapi.load('client', async () => {
+        await gapi.client.init({
+          discoveryDocs: ["https://classroom.googleapis.com/$discovery/rest?version=v1"],
+        });
+        gapiInited = true;
+      });
+    }
+
+    function gisLoaded() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: HARDCODED_CLIENT_ID,
+        scope: SCOPES,
+        callback: async (resp) => {
+          if (resp.error) {
+            alert("Google Sign-In Error: " + resp.error);
+            return;
+          }
+          document.getElementById('loginBtn').classList.add('hidden');
+          document.getElementById('logoutBtn').classList.remove('hidden');
+          await listCourses();
+        },
+      });
+      gsiInited = true;
+    }
+
+    function handleAuthClick() {
+      if (!gsiInited || !gapiInited) {
+        alert("Google libraries are still loading. Please wait 3 seconds and click Sign In again.");
+        return;
+      }
       
-      <!-- Class Overview Summary Cards -->
-      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Course Name</div>
-          <div id="summaryCourseName" class="text-lg font-bold text-slate-800 mt-1 truncate">-</div>
-        </div>
-        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Enrolled Students</div>
-          <div id="summaryStudentCount" class="text-2xl font-bold text-indigo-600 mt-1">0</div>
-        </div>
-        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Configured Grade Categories</div>
-          <div id="summaryCategoryCount" class="text-2xl font-bold text-emerald-600 mt-1">0</div>
-        </div>
-        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Class Overall Average</div>
-          <div id="summaryClassOverall" class="text-2xl font-bold text-purple-600 mt-1">-%</div>
-        </div>
-      </section>
+      try {
+        if (gapi.client.getToken() === null) {
+          tokenClient.requestAccessToken({prompt: 'consent'});
+        } else {
+          tokenClient.requestAccessToken({prompt: ''});
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Could not trigger sign-in popup. Please check if your browser blocked popups for this site.");
+      }
+    }
 
-      <!-- Category Averages Summary Cards -->
-      <section>
-        <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <i class="fa-solid fa-layer-group text-indigo-600"></i> Category Summary Averages
-        </h2>
-        <div id="categoryCardsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <!-- Dynamic Category Cards go here -->
-        </div>
-      </section>
+    function handleSignoutClick() {
+      const token = gapi.client.getToken();
+      if (token !== null) {
+        google.accounts.oauth2.revoke(token.access_token);
+        gapi.client.setToken('');
+        document.getElementById('loginBtn').classList.remove('hidden');
+        document.getElementById('logoutBtn').classList.add('hidden');
+        document.getElementById('courseSelect').innerHTML = '<option value="">-- Sign in with Google to view courses --</option>';
+        document.getElementById('dashboardResults').classList.add('hidden');
+      }
+    }
 
-      <!-- Student Grade Matrix Section -->
-      <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <i class="fa-solid fa-users text-indigo-600"></i> Student Category Grade Matrix
-            </h2>
-            <p class="text-xs text-slate-500 mt-1">Individual student performance for each grade category</p>
-          </div>
-          <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
-            <input type="text" id="studentSearchInput" oninput="filterStudentTable()" placeholder="Search student name..." class="bg-slate-50 border border-slate-300 text-xs rounded-lg p-2.5 w-full md:w-48 focus:ring-indigo-500 focus:border-indigo-500">
-          </div>
-        </div>
+    async function listCourses() {
+      document.getElementById('loadingSpinner').classList.remove('hidden');
+      try {
+        const response = await gapi.client.classroom.courses.list({
+          courseStates: 'ACTIVE',
+          teacherId: 'me'
+        });
+        const courses = response.result.courses;
+        const select = document.getElementById('courseSelect');
+        select.innerHTML = '<option value="">-- Select a Course --</option>';
 
-        <!-- Matrix Table -->
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm text-left text-slate-600">
-            <thead class="text-xs text-slate-700 uppercase bg-slate-50 border-b border-slate-200">
-              <tr id="matrixHeaderRow">
-                <th scope="col" class="px-6 py-4">Student Name</th>
-                <th scope="col" class="px-6 py-4 text-center">Overall Grade</th>
-              </tr>
-            </thead>
-            <tbody id="matrixTableBody" class="divide-y divide-slate-200">
-              <!-- Dynamic Rows -->
-            </tbody>
-          </table>
-        </div>
-      </section>
+        if (courses && courses.length > 0) {
+          courses.forEach(c => {
+            select.innerHTML += `<option value="${c.id}">${c.name} ${c.section ? '('+c.section+')' : ''}</option>`;
+          });
+        } else {
+          select.innerHTML = '<option value="">No active courses found as teacher.</option>';
+        }
+      } catch (err) {
+        console.error("Error listing courses:", err);
+        alert("Error loading courses. Check console or verify Classroom API is enabled.");
+      }
+      document.getElementById('loadingSpinner').classList.add('hidden');
+    }
 
-      <!-- Visual Charts Section -->
-      <section class="
+    async function calculateGrades() {
+      const courseId = document.getElementById('courseSelect').value;
+      if(!courseId) {
+        alert('Please select a course first.');
+        return;
+      }
+      document.getElementById('loadingSpinner').classList.remove('hidden');
+      document.getElementById('dashboardResults').classList.remove('hidden');
+      document.getElementById('summaryCourseName').innerText = "Loaded course data successfully!";
+      document.getElementById('loadingSpinner').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
