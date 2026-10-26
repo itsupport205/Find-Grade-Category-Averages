@@ -182,45 +182,46 @@
       tokenClient.requestAccessToken({ prompt: 'select_account consent' });
     }
 
-    async function initGapiAndFetchCourses() {
-      document.getElementById('loadingSpinner').classList.remove('hidden');
-      document.getElementById('spinnerText').innerText = "Connecting to Google Classroom...";
+async function initGapiAndFetchCourses() {
+  document.getElementById('loadingSpinner').classList.remove('hidden');
+  document.getElementById('spinnerText').innerText = "Connecting to Google Classroom...";
 
-      if (!gapi.client) {
-        await new Promise((resolve) => gapi.load('client', resolve));
-      }
+  if (!gapi.client) {
+    await new Promise((resolve) => gapi.load('client', resolve));
+  }
 
-      try {
-        await gapi.client.init({
-          discoveryDocs: ["https://classroom.googleapis.com/$discovery/rest?version=v1"],
-        });
+  try {
+    await gapi.client.init({
+      discoveryDocs: ["https://classroom.googleapis.com/$discovery/rest?version=v1"],
+    });
 
-        const response = await gapi.client.classroom.courses.list({
-          courseStates: 'ACTIVE',
-          teacherId: 'me'
-        });
+    // Fetches all active courses for your account
+    const response = await gapi.client.classroom.courses.list({
+      courseStates: 'ACTIVE'
+    });
 
-        const courses = response.result.courses || [];
-        const select = document.getElementById('courseSelect');
-        select.innerHTML = '<option value="">-- Select a Course --</option>';
+    const courses = response.result.courses || [];
+    const select = document.getElementById('courseSelect');
+    select.innerHTML = '<option value="">-- Select a Course --</option>';
 
-        if (courses.length > 0) {
-          courses.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = c.name + (c.section ? ' (' + c.section + ')' : '');
-            select.appendChild(opt);
-          });
-        } else {
-          select.innerHTML = '<option value="">No active courses found where you are a teacher.</option>';
-        }
-      } catch (err) {
-        console.error("Error loading courses:", err);
-        alert("Authenticated successfully, but could not retrieve Classroom courses. Check developer console.");
-      }
-
-      document.getElementById('loadingSpinner').classList.add('hidden');
+    if (courses.length > 0) {
+      courses.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name + (c.section ? ' (' + c.section + ')' : '');
+        select.appendChild(opt);
+      });
+    } else {
+      select.innerHTML = '<option value="">No active Google Classroom courses found for this account.</option>';
     }
+  } catch (err) {
+    console.error("Error loading courses:", err);
+    const errorDetails = err.result?.error?.message || err.message || JSON.stringify(err);
+    alert("Google API Error: " + errorDetails);
+  }
+
+  document.getElementById('loadingSpinner').classList.add('hidden');
+}
 
     function handleSignoutClick() {
       if (gapi.client && gapi.client.getToken()) {
