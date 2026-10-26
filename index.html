@@ -151,7 +151,9 @@
 
   <script>
     const CLIENT_ID = '1036380348780-g9im8k30a4ptqknhu8j96nmrh766j86b.apps.googleusercontent.com';
+    // Full coursework scope required for numeric grade payloads
     const SCOPES = 'https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.coursework.students https://www.googleapis.com/auth/classroom.rosters.readonly';
+    
     let tokenClient = null;
     let categoryChartInstance = null;
     let weightChartInstance = null;
@@ -246,20 +248,16 @@
       document.getElementById('dashboardResults').classList.add('hidden');
 
       try {
-        // 1. Fetch Course details & Categories
         const courseRes = await gapi.client.classroom.courses.get({ id: courseId });
         const course = courseRes.result;
         const categories = course.gradebookSettings?.gradeCategories || [];
 
-        // 2. Fetch Roster
         const studentsRes = await gapi.client.classroom.courses.students.list({ courseId: courseId });
         const students = studentsRes.result.students || [];
 
-        // 3. Fetch Coursework
         const workRes = await gapi.client.classroom.courses.courseWork.list({ courseId: courseId });
         const coursework = workRes.result.courseWork || [];
 
-        // 4. Fetch Submissions per Coursework item
         const allSubmissions = [];
         for (const workItem of coursework) {
           try {
@@ -291,7 +289,6 @@
       document.getElementById('summaryStudentCount').innerText = students.length;
       document.getElementById('summaryCategoryCount').innerText = categories.length;
 
-      // Map Coursework ID -> maxPoints and category ID
       const workMap = {};
       coursework.forEach(w => {
         workMap[w.id] = {
@@ -300,7 +297,6 @@
         };
       });
 
-      // Build Multi-Alias Student Registry (maps userId, profile.id, email to primary student data)
       const idToPrimaryMap = {};
       const studentGrades = {};
 
@@ -321,7 +317,6 @@
         }
       });
 
-      // Process Submissions
       submissions.forEach(sub => {
         const workInfo = workMap[sub.courseWorkId];
         const rawUserId = sub.userId;
@@ -345,7 +340,6 @@
         }
       });
 
-      // Render Headers
       const headerRow = document.getElementById('matrixHeaderRow');
       headerRow.innerHTML = `<th scope="col" class="px-6 py-4">Student Name</th>`;
       
@@ -359,7 +353,6 @@
       }
       headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">Overall Grade</th>`;
 
-      // Render Rows
       const tbody = document.getElementById('matrixTableBody');
       tbody.innerHTML = '';
 
