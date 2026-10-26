@@ -260,7 +260,7 @@
         const workRes = await gapi.client.classroom.courses.courseWork.list({ courseId: courseId });
         const coursework = workRes.result.courseWork || [];
 
-        // 4. Fetch Submissions per Coursework item explicitly
+        // 4. Fetch Submissions per Coursework item
         const allSubmissions = [];
         for (const workItem of coursework) {
           try {
@@ -292,6 +292,7 @@
       document.getElementById('summaryStudentCount').innerText = students.length;
       document.getElementById('summaryCategoryCount').innerText = categories.length;
 
+      // Map Coursework ID -> maxPoints and category ID
       const workMap = {};
       coursework.forEach(w => {
         workMap[w.id] = {
@@ -300,39 +301,52 @@
         };
       });
 
+      // Build Multi-Alias Student Registry (maps userId, profile.id, email to primary student data)
+      const idToPrimaryMap = {};
       const studentGrades = {};
+
       students.forEach(s => {
-        const studentId = s.userId || s.profile?.id;
-        if (studentId) {
-          studentGrades[studentId] = {
+        const primaryId = s.userId || s.profile?.id;
+        if (primaryId) {
+          const studentObj = {
             name: s.profile?.name?.fullName || 'Enrolled Student',
             categories: {}
           };
+
+          studentGrades[primaryId] = studentObj;
+          idToPrimaryMap[primaryId] = primaryId;
+
+          if (s.userId) idToPrimaryMap[s.userId] = primaryId;
+          if (s.profile?.id) idToPrimaryMap[s.profile.id] = primaryId;
+          if (s.profile?.emailAddress) idToPrimaryMap[s.profile.emailAddress] = primaryId;
         }
       });
 
+      // Process Submissions
       submissions.forEach(sub => {
         const workInfo = workMap[sub.courseWorkId];
-        const studentId = sub.userId;
+        const rawUserId = sub.userId;
+        const targetStudentId = idToPrimaryMap[rawUserId] || rawUserId;
 
         let rawGrade = sub.assignedGrade;
         if (rawGrade === undefined || rawGrade === null) {
           rawGrade = sub.draftGrade;
         }
 
-        if (workInfo && rawGrade !== undefined && rawGrade !== null && studentGrades[studentId]) {
+        if (workInfo && rawGrade !== undefined && rawGrade !== null && studentGrades[targetStudentId]) {
           const catId = workInfo.categoryId;
           const gradeNum = Number(rawGrade);
 
-          if (!studentGrades[studentId].categories[catId]) {
-            studentGrades[studentId].categories[catId] = { earned: 0, possible: 0 };
+          if (!studentGrades[targetStudentId].categories[catId]) {
+            studentGrades[targetStudentId].categories[catId] = { earned: 0, possible: 0 };
           }
 
-          studentGrades[studentId].categories[catId].earned += gradeNum;
-          studentGrades[studentId].categories[catId].possible += workInfo.maxPoints;
+          studentGrades[targetStudentId].categories[catId].earned += gradeNum;
+          studentGrades[targetStudentId].categories[catId].possible += workInfo.maxPoints;
         }
       });
 
+      // Render Headers
       const headerRow = document.getElementById('matrixHeaderRow');
       headerRow.innerHTML = `<th scope="col" class="px-6 py-4">Student Name</th>`;
       
@@ -346,6 +360,7 @@
       }
       headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">Overall Grade</th>`;
 
+      // Render Rows
       const tbody = document.getElementById('matrixTableBody');
       tbody.innerHTML = '';
 
