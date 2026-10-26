@@ -252,20 +252,16 @@
       document.getElementById('diagnosticBanner').classList.add('hidden');
 
       try {
-        // 1. Fetch Course details & Categories
         const courseRes = await gapi.client.classroom.courses.get({ id: courseId });
         const course = courseRes.result;
         const categories = course.gradebookSettings?.gradeCategories || [];
 
-        // 2. Fetch Roster
         const studentsRes = await gapi.client.classroom.courses.students.list({ courseId: courseId });
         const students = studentsRes.result.students || [];
 
-        // 3. Fetch Coursework
         const workRes = await gapi.client.classroom.courses.courseWork.list({ courseId: courseId });
         const coursework = workRes.result.courseWork || [];
 
-        // 4. Fetch Submissions
         const allSubmissions = [];
         for (const workItem of coursework) {
           try {
@@ -297,16 +293,27 @@
       document.getElementById('summaryStudentCount').innerText = students.length;
       document.getElementById('summaryCategoryCount').innerText = categories.length;
 
-      // WorkMap
+      // Match coursework to categories (checking gradeCategoryId OR title keywords)
       const workMap = {};
       coursework.forEach(w => {
+        let assignedCatId = w.gradeCategoryId;
+
+        // Title fuzzy matching fallback if gradeCategoryId is undefined
+        if (!assignedCatId && categories.length > 0) {
+          const titleLower = (w.title || '').toLowerCase();
+          const matched = categories.find(c => titleLower.includes((c.name || '').toLowerCase()));
+          if (matched) {
+            assignedCatId = matched.id;
+          }
+        }
+
         workMap[w.id] = {
           maxPoints: (w.maxPoints !== undefined && Number(w.maxPoints) > 0) ? Number(w.maxPoints) : 100,
-          categoryId: w.gradeCategoryId || 'UNCATEGORIZED'
+          categoryId: assignedCatId || 'UNCATEGORIZED'
         };
       });
 
-      // Student Lookup Table
+      // Build Student Lookup Table
       const studentGrades = {};
       const idToPrimaryMap = {};
 
@@ -315,222 +322,4 @@
         if (primaryId) {
           studentGrades[primaryId] = {
             name: s.profile?.name?.fullName || 'Enrolled Student',
-            categories: {},
-            totalEarned: 0,
-            totalPossible: 0
-          };
-          idToPrimaryMap[primaryId] = primaryId;
-          if (s.userId) idToPrimaryMap[s.userId] = primaryId;
-          if (s.profile?.id) idToPrimaryMap[s.profile.id] = primaryId;
-          if (s.profile?.emailAddress) idToPrimaryMap[s.profile.emailAddress] = primaryId;
-        }
-      });
-
-      let gradedSubmissionsCount = 0;
-
-      // Process Submissions
-      submissions.forEach(sub => {
-        const workInfo = workMap[sub.courseWorkId];
-        const rawUserId = sub.userId;
-        const targetStudentId = idToPrimaryMap[rawUserId] || rawUserId;
-
-        // Use assignedGrade, or draftGrade
-        let rawGrade = sub.assignedGrade;
-        if (rawGrade === undefined || rawGrade === null) {
-          rawGrade = sub.draftGrade;
-        }
-
-        if (workInfo && rawGrade !== undefined && rawGrade !== null && studentGrades[targetStudentId]) {
-          gradedSubmissionsCount++;
-          const catId = workInfo.categoryId;
-          const gradeNum = Number(rawGrade);
-
-          // Track category breakdown
-          if (!studentGrades[targetStudentId].categories[catId]) {
-            studentGrades[targetStudentId].categories[catId] = { earned: 0, possible: 0 };
-          }
-          studentGrades[targetStudentId].categories[catId].earned += gradeNum;
-          studentGrades[targetStudentId].categories[catId].possible += workInfo.maxPoints;
-
-          // Track aggregate overall breakdown
-          studentGrades[targetStudentId].totalEarned += gradeNum;
-          studentGrades[targetStudentId].totalPossible += workInfo.maxPoints;
-        }
-      });
-
-      // Diagnostic Banner
-      const diagBanner = document.getElementById('diagnosticBanner');
-      diagBanner.classList.remove('hidden');
-
-      if (gradedSubmissionsCount > 0) {
-        diagBanner.className = "mb-6 p-4 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900 text-sm";
-        diagBanner.innerHTML = `<i class="fa-solid fa-circle-check mr-2"></i> <strong>Calculated:</strong> Successfully processed ${coursework.length} assignment(s) and ${gradedSubmissionsCount} grade entries across ${students.length} students.`;
-      } else {
-        diagBanner.className = "mb-6 p-4 rounded-xl border bg-amber-50 border-amber-200 text-amber-900 text-sm";
-        diagBanner.innerHTML = `<i class="fa-solid fa-circle-info mr-2"></i> <strong>Notice:</strong> Individual point entries were unavailable. Generating matrix based on Google Classroom course settings.`;
-      }
-
-      // Build Headers
-      const headerRow = document.getElementById('matrixHeaderRow');
-      headerRow.innerHTML = `<th scope="col" class="px-6 py-4">Student Name</th>`;
-      
-      if (categories.length === 0) {
-        headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">All Coursework</th>`;
-      } else {
-        categories.forEach(cat => {
-          const w = cat.weight ? ` (${cat.weight/10000}%)` : '';
-          headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">${cat.name}${w}</th>`;
-        });
-      }
-      headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">Overall Grade</th>`;
-
-      // Build Rows
-      const tbody = document.getElementById('matrixTableBody');
-      tbody.innerHTML = '';
-
-      const catClassTotals = {};
-      let totalClassSum = 0;
-      let totalClassCount = 0;
-
-      Object.keys(studentGrades).forEach(sId => {
-        const sData = studentGrades[sId];
-        let rowHtml = `<td class="px-6 py-4 font-semibold text-slate-800">${sData.name}</td>`;
-        
-        let studentWeightedSum = 0;
-        let studentWeightTotal = 0;
-
-        if (categories.length === 0) {
-          if (sData.totalPossible > 0) {
-            const avg = Math.round((sData.totalEarned / sData.totalPossible) * 100);
-            rowHtml += `<td class="px-6 py-4 text-center font-semibold text-slate-700">${avg}%</td>`;
-            studentWeightedSum += avg;
-            studentWeightTotal += 1;
-          } else {
-            rowHtml += `<td class="px-6 py-4 text-center font-semibold text-slate-700">88%</td>`;
-            studentWeightedSum += 88;
-            studentWeightTotal += 1;
-          }
-        } else {
-          categories.forEach(cat => {
-            const catData = sData.categories[cat.id];
-            const weight = cat.weight ? (cat.weight / 10000) : (100 / categories.length);
-            
-            if (!catClassTotals[cat.id]) catClassTotals[cat.id] = { sum: 0, count: 0 };
-
-            if (catData && catData.possible > 0) {
-              const avg = Math.round((catData.earned / catData.possible) * 100);
-              rowHtml += `<td class="px-6 py-4 text-center font-medium">${avg}%</td>`;
-              
-              studentWeightedSum += (avg * weight);
-              studentWeightTotal += weight;
-
-              catClassTotals[cat.id].sum += avg;
-              catClassTotals[cat.id].count += 1;
-            } else if (sData.totalPossible > 0) {
-              const fallbackAvg = Math.round((sData.totalEarned / sData.totalPossible) * 100);
-              rowHtml += `<td class="px-6 py-4 text-center font-medium">${fallbackAvg}%</td>`;
-              
-              studentWeightedSum += (fallbackAvg * weight);
-              studentWeightTotal += weight;
-
-              catClassTotals[cat.id].sum += fallbackAvg;
-              catClassTotals[cat.id].count += 1;
-            } else {
-              rowHtml += `<td class="px-6 py-4 text-center text-slate-400">N/A</td>`;
-            }
-          });
-        }
-
-        if (studentWeightTotal > 0) {
-          const finalScore = categories.length > 0
-            ? Math.round(studentWeightedSum / (studentWeightTotal / 100))
-            : Math.round(studentWeightedSum / studentWeightTotal);
-
-          let badgeClass = 'badge-F';
-          if (finalScore >= 90) badgeClass = 'badge-A';
-          else if (finalScore >= 80) badgeClass = 'badge-B';
-          else if (finalScore >= 70) badgeClass = 'badge-C';
-          else if (finalScore >= 60) badgeClass = 'badge-D';
-
-          rowHtml += `<td class="px-6 py-4 text-center"><span class="px-3 py-1 text-xs font-bold rounded-full border ${badgeClass}">${finalScore}%</span></td>`;
-          totalClassSum += finalScore;
-          totalClassCount += 1;
-        } else {
-          rowHtml += `<td class="px-6 py-4 text-center"><span class="px-3 py-1 text-xs font-bold rounded-full border border-slate-200 bg-slate-100 text-slate-500">N/A</span></td>`;
-        }
-
-        tbody.innerHTML += `<tr>${rowHtml}</tr>`;
-      });
-
-      if (totalClassCount > 0) {
-        document.getElementById('summaryClassOverall').innerText = Math.round(totalClassSum / totalClassCount) + '%';
-      } else {
-        document.getElementById('summaryClassOverall').innerText = 'N/A';
-      }
-
-      renderCategoryCardsAndCharts(categories, catClassTotals);
-    }
-
-    function renderCategoryCardsAndCharts(categories, catClassTotals) {
-      const cardsGrid = document.getElementById('categoryCardsGrid');
-      cardsGrid.innerHTML = '';
-
-      const chartLabels = [];
-      const categoryAverages = [];
-      const weights = [];
-
-      if (categories.length === 0) {
-        cardsGrid.innerHTML = `<div class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-amber-800 text-xs col-span-3"><i class="fa-solid fa-circle-info mr-1"></i> No explicit grade categories configured in Google Classroom for this course. Showing overall coursework summary.</div>`;
-      } else {
-        categories.forEach(cat => {
-          const weightPercent = cat.weight ? (cat.weight / 10000) : 0;
-          const catStats = catClassTotals[cat.id];
-          const catAvg = (catStats && catStats.count > 0) ? Math.round(catStats.sum / catStats.count) : null;
-
-          chartLabels.push(cat.name);
-          categoryAverages.push(catAvg || 0);
-          weights.push(weightPercent);
-
-          cardsGrid.innerHTML += `
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
-              <div class="flex justify-between items-start mb-2">
-                <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded border border-indigo-100">Weight: ${weightPercent}%</span>
-              </div>
-              <h3 class="text-base font-bold text-slate-800">${cat.name}</h3>
-              <div class="mt-3 text-2xl font-extrabold text-indigo-600">${catAvg !== null ? catAvg + '%' : 'N/A'}</div>
-              <p class="text-xs text-slate-400 mt-1">Class Category Average</p>
-            </div>
-          `;
-        });
-      }
-
-      renderCharts(chartLabels, categoryAverages, weights);
-    }
-
-    function renderCharts(labels, averages, weights) {
-      if(categoryChartInstance) categoryChartInstance.destroy();
-      if(weightChartInstance) weightChartInstance.destroy();
-
-      if (labels.length === 0) {
-        labels = ['General Coursework'];
-        averages = [0];
-        weights = [100];
-      }
-
-      const ctx1 = document.getElementById('categoryChart').getContext('2d');
-      categoryChartInstance = new Chart(ctx1, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Class Category Average (%)', data: averages, backgroundColor: '#6366f1' }] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100, min: 0 } } }
-      });
-
-      const ctx2 = document.getElementById('weightChart').getContext('2d');
-      weightChartInstance = new Chart(ctx2, {
-        type: 'doughnut',
-        data: { labels, datasets: [{ data: weights, backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'] }] },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
-    }
-  </script>
-</body>
-</html>
+            categories:
