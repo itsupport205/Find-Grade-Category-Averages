@@ -155,19 +155,19 @@
     let weightChartInstance = null;
 
     function handleAuthClick() {
-      // Check if Google JS loaded
       if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
         alert("Google libraries are still downloading. Please wait 3 seconds and click Sign In again.");
         return;
       }
 
-      // Initialize Token Client
       if (!tokenClient) {
         tokenClient = google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID,
           scope: SCOPES,
           callback: async (tokenResponse) => {
             if (tokenResponse && tokenResponse.access_token) {
+              // Pass access token directly to gapi.client
+              gapi.client.setToken(tokenResponse);
               document.getElementById('loginBtn').classList.add('hidden');
               document.getElementById('logoutBtn').classList.remove('hidden');
               await initGapiAndFetchCourses();
@@ -178,174 +178,38 @@
         });
       }
 
-      // Explicitly request access token
       tokenClient.requestAccessToken({ prompt: 'select_account consent' });
     }
 
-async function initGapiAndFetchCourses() {
-  document.getElementById('loadingSpinner').classList.remove('hidden');
-  document.getElementById('spinnerText').innerText = "Connecting to Google Classroom...";
-
-  if (!gapi.client) {
-    await new Promise((resolve) => gapi.load('client', resolve));
-  }
-
-  try {
-    await gapi.client.init({
-      discoveryDocs: ["https://classroom.googleapis.com/$discovery/rest?version=v1"],
-    });
-
-    // Fetches all active courses for your account
-    const response = await gapi.client.classroom.courses.list({
-      courseStates: 'ACTIVE'
-    });
-
-    const courses = response.result.courses || [];
-    const select = document.getElementById('courseSelect');
-    select.innerHTML = '<option value="">-- Select a Course --</option>';
-
-    if (courses.length > 0) {
-      courses.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = c.name + (c.section ? ' (' + c.section + ')' : '');
-        select.appendChild(opt);
-      });
-    } else {
-      select.innerHTML = '<option value="">No active Google Classroom courses found for this account.</option>';
-    }
-  } catch (err) {
-    console.error("Error loading courses:", err);
-    const errorDetails = err.result?.error?.message || err.message || JSON.stringify(err);
-    alert("Google API Error: " + errorDetails);
-  }
-
-  document.getElementById('loadingSpinner').classList.add('hidden');
-}
-
-    function handleSignoutClick() {
-      if (gapi.client && gapi.client.getToken()) {
-        const token = gapi.client.getToken().access_token;
-        if (token) google.accounts.oauth2.revoke(token);
-        gapi.client.setToken('');
-      }
-      document.getElementById('loginBtn').classList.remove('hidden');
-      document.getElementById('logoutBtn').classList.add('hidden');
-      document.getElementById('courseSelect').innerHTML = '<option value="">-- Sign in with Google to view courses --</option>';
-      document.getElementById('dashboardResults').classList.add('hidden');
-    }
-
-    async function calculateGrades() {
-      const select = document.getElementById('courseSelect');
-      const courseId = select.value;
-
-      if (!courseId) {
-        alert('Please select a course from the dropdown first.');
-        return;
-      }
-
+    async function initGapiAndFetchCourses() {
       document.getElementById('loadingSpinner').classList.remove('hidden');
-      document.getElementById('spinnerText').innerText = "Calculating grade category averages...";
-      document.getElementById('dashboardResults').classList.add('hidden');
+      document.getElementById('spinnerText').innerText = "Connecting to Google Classroom...";
 
-      let course = { name: select.options[select.selectedIndex].text };
-      let categories = [];
-      let students = [];
-
-      try {
-        const courseRes = await gapi.client.classroom.courses.get({ id: courseId });
-        course = courseRes.result;
-        categories = course.gradebookSettings?.gradeCategories || [];
-      } catch (e) {
-        console.warn("Using fallback course title", e);
+      if (!gapi.client) {
+        await new Promise((resolve) => gapi.load('client', resolve));
       }
 
       try {
-        const studentsRes = await gapi.client.classroom.courses.students.list({ courseId: courseId });
-        students = studentsRes.result.students || [];
-      } catch (e) {
-        console.warn("Could not retrieve roster", e);
-      }
-
-      renderResults(course, categories, students);
-      document.getElementById('loadingSpinner').classList.add('hidden');
-    }
-
-    function renderResults(course, categories, students) {
-      document.getElementById('dashboardResults').classList.remove('hidden');
-      document.getElementById('summaryCourseName').innerText = course.name;
-      document.getElementById('summaryStudentCount').innerText = students.length;
-      document.getElementById('summaryCategoryCount').innerText = categories.length;
-
-      const cardsGrid = document.getElementById('categoryCardsGrid');
-      cardsGrid.innerHTML = '';
-
-      if (categories.length === 0) {
-        cardsGrid.innerHTML = `<div class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-amber-800 text-xs col-span-3"><i class="fa-solid fa-circle-info mr-1"></i> No explicit grade weighting categories found in Google Classroom settings for this course.</div>`;
-      } else {
-        categories.forEach(cat => {
-          const weightPercent = cat.weight ? (cat.weight / 10000) : 0;
-          cardsGrid.innerHTML += `
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-              <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded border border-indigo-100">Weight: ${weightPercent}%</span>
-              <h3 class="text-base font-bold text-slate-800 mt-2">${cat.name}</h3>
-            </div>
-          `;
+        await gapi.client.init({
+          discoveryDocs: ["https://classroom.googleapis.com/$discovery/rest?version=v1"],
         });
-      }
 
-      const headerRow = document.getElementById('matrixHeaderRow');
-      headerRow.innerHTML = `<th scope="col" class="px-6 py-4">Student Name</th>`;
-      if (categories.length === 0) {
-        headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">Uncategorized</th>`;
-      } else {
-        categories.forEach(cat => {
-          headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">${cat.name} (${cat.weight/10000}%)</th>`;
+        const response = await gapi.client.classroom.courses.list({
+          courseStates: 'ACTIVE'
         });
-      }
-      headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">Status</th>`;
 
-      const tbody = document.getElementById('matrixTableBody');
-      tbody.innerHTML = '';
-      if (students.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3" class="px-6 py-4 text-center text-xs text-slate-400">No students found in this course roster.</td></tr>`;
-      } else {
-        students.forEach(s => {
-          let rowHtml = `<td class="px-6 py-4 font-semibold text-slate-800">${s.profile?.name?.fullName || 'Enrolled Student'}</td>`;
-          if (categories.length === 0) {
-            rowHtml += `<td class="px-6 py-4 text-center font-medium">--</td>`;
-          } else {
-            categories.forEach(() => { rowHtml += `<td class="px-6 py-4 text-center font-medium">--</td>`; });
-          }
-          rowHtml += `<td class="px-6 py-4 text-center"><span class="px-3 py-1 text-xs font-bold rounded-full border badge-B">Enrolled</span></td>`;
-          tbody.innerHTML += `<tr>${rowHtml}</tr>`;
-        });
-      }
+        const courses = response.result.courses || [];
+        const select = document.getElementById('courseSelect');
+        select.innerHTML = '<option value="">-- Select a Course --</option>';
 
-      renderCharts(categories);
-    }
-
-    function renderCharts(categories) {
-      if(categoryChartInstance) categoryChartInstance.destroy();
-      if(weightChartInstance) weightChartInstance.destroy();
-
-      const labels = categories.length > 0 ? categories.map(c => c.name) : ['General Coursework'];
-      const weights = categories.length > 0 ? categories.map(c => c.weight ? c.weight/10000 : 100) : [100];
-
-      const ctx1 = document.getElementById('categoryChart').getContext('2d');
-      categoryChartInstance = new Chart(ctx1, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Weight (%)', data: weights, backgroundColor: '#6366f1' }] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100, min: 0 } } }
-      });
-
-      const ctx2 = document.getElementById('weightChart').getContext('2d');
-      weightChartInstance = new Chart(ctx2, {
-        type: 'doughnut',
-        data: { labels, datasets: [{ data: weights, backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ec4899'] }] },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
-    }
-  </script>
-</body>
-</html>
+        if (courses.length > 0) {
+          courses.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name + (c.section ? ' (' + c.section + ')' : '');
+            select.appendChild(opt);
+          });
+        } else {
+          select.innerHTML = '<option value="">No active Google Classroom courses found for this account.</option>';
+        }
+      } catch (err)
