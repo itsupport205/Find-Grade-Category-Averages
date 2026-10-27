@@ -273,4 +273,58 @@
               allSubmissions.push(...subsRes.result.studentSubmissions);
             }
           } catch (e) {
-            console.warn(`Could not fetch submissions for
+            console.warn(`Could not fetch submissions for work item ${workItem.id}`, e);
+          }
+        }
+
+        computeAndRenderMatrix(course, categories, students, coursework, allSubmissions);
+      } catch (err) {
+        console.error("Error calculating grade matrix:", err);
+        const errorMsg = err.result?.error?.message || err.message || "Failed to calculate grades.";
+        alert("Error loading grade matrix: " + errorMsg);
+      }
+
+      document.getElementById('loadingSpinner').classList.add('hidden');
+    }
+
+    function matchWorkToCategory(w, categories) {
+      if (w.gradeCategoryId) return w.gradeCategoryId;
+      if (!categories || categories.length === 0) return 'UNCATEGORIZED';
+
+      const titleLower = (w.title || '').toLowerCase();
+
+      for (const cat of categories) {
+        const catLower = (cat.name || '').toLowerCase();
+        
+        if (titleLower.includes(catLower)) return cat.id;
+
+        // Common Educational Terms Mapping
+        if ((catLower.includes('homework') || catLower.includes('hw')) && (titleLower.includes('hw') || titleLower.includes('homework') || titleLower.includes('pce'))) return cat.id;
+        if ((catLower.includes('quiz') || catLower.includes('test')) && (titleLower.includes('quiz') || titleLower.includes('test') || titleLower.includes('exam'))) return cat.id;
+        if ((catLower.includes('project') || catLower.includes('lab')) && (titleLower.includes('project') || titleLower.includes('lab') || titleLower.includes('essay'))) return cat.id;
+      }
+
+      return 'UNCATEGORIZED';
+    }
+
+    function computeAndRenderMatrix(course, categories, students, coursework, submissions) {
+      document.getElementById('dashboardResults').classList.remove('hidden');
+      document.getElementById('summaryCourseName').innerText = course.name;
+      document.getElementById('summaryStudentCount').innerText = students.length;
+      document.getElementById('summaryCategoryCount').innerText = categories.length;
+
+      const workMap = {};
+      coursework.forEach(w => {
+        workMap[w.id] = {
+          maxPoints: (w.maxPoints !== undefined && Number(w.maxPoints) > 0) ? Number(w.maxPoints) : 100,
+          categoryId: matchWorkToCategory(w, categories)
+        };
+      });
+
+      const studentGrades = {};
+      const idToPrimaryMap = {};
+
+      students.forEach(s => {
+        const primaryId = s.userId || s.profile?.id;
+        if (primaryId) {
+          studentGrades[primaryId] = {
