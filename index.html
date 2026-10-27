@@ -10,7 +10,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Google Identity Services & API -->
+  <!-- Google API & Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
   <style>
@@ -101,7 +101,7 @@
           <div id="summaryStudentCount" class="text-2xl font-bold text-indigo-600 mt-1">0</div>
         </div>
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Grade Categories</div>
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Configured Categories</div>
           <div id="summaryCategoryCount" class="text-2xl font-bold text-emerald-600 mt-1">0</div>
         </div>
         <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -159,7 +159,7 @@
 
     function triggerGoogleLogin() {
       if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
-        alert("Google Authentication script has not finished loading or is blocked by an ad-blocker. Please refresh the page or disable browser extensions.");
+        alert("Google Authentication script is loading. Please refresh if it takes longer than a few seconds.");
         return;
       }
 
@@ -283,37 +283,35 @@
       document.getElementById('loadingSpinner').classList.add('hidden');
     }
 
-    function matchWorkToCategory(w, categories) {
-      if (w.gradeCategoryId) return w.gradeCategoryId;
-      if (!categories || categories.length === 0) return 'UNCATEGORIZED';
-
-      const titleLower = (w.title || '').toLowerCase();
-
-      for (const cat of categories) {
-        const catLower = (cat.name || '').toLowerCase();
-        if (titleLower.includes(catLower)) return cat.id;
-
-        if ((catLower.includes('homework') || catLower.includes('hw')) && (titleLower.includes('hw') || titleLower.includes('homework') || titleLower.includes('pce'))) return cat.id;
-        if ((catLower.includes('quiz') || catLower.includes('test')) && (titleLower.includes('quiz') || titleLower.includes('test') || titleLower.includes('exam'))) return cat.id;
-        if ((catLower.includes('project') || catLower.includes('lab')) && (titleLower.includes('project') || titleLower.includes('lab') || titleLower.includes('essay'))) return cat.id;
-      }
-
-      return 'UNCATEGORIZED';
-    }
-
     function computeAndRenderMatrix(course, categories, students, coursework, submissions) {
       document.getElementById('dashboardResults').classList.remove('hidden');
       document.getElementById('summaryCourseName').innerText = course.name;
       document.getElementById('summaryStudentCount').innerText = students.length;
       document.getElementById('summaryCategoryCount').innerText = categories.length;
 
+      // Track if there are uncategorized assignments in this course
+      let hasUncategorizedWork = false;
+
       const workMap = {};
       coursework.forEach(w => {
+        const catId = w.gradeCategoryId || 'UNCATEGORIZED';
+        if (catId === 'UNCATEGORIZED') hasUncategorizedWork = true;
+
         workMap[w.id] = {
           maxPoints: (w.maxPoints !== undefined && Number(w.maxPoints) > 0) ? Number(w.maxPoints) : 100,
-          categoryId: matchWorkToCategory(w, categories)
+          categoryId: catId
         };
       });
+
+      // Build full category display list (Official categories + Uncategorized if present)
+      const displayCategories = [...categories];
+      if (hasUncategorizedWork || categories.length === 0) {
+        displayCategories.push({
+          id: 'UNCATEGORIZED',
+          name: 'Uncategorized',
+          weight: 0
+        });
+      }
 
       const studentGrades = {};
       const idToPrimaryMap = {};
@@ -363,19 +361,17 @@
         }
       });
 
+      // Render Matrix Table Headers
       const headerRow = document.getElementById('matrixHeaderRow');
       headerRow.innerHTML = `<th scope="col" class="px-6 py-4">Student Name</th>`;
       
-      if (categories.length === 0) {
-        headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">All Coursework</th>`;
-      } else {
-        categories.forEach(cat => {
-          const w = cat.weight ? ` (${cat.weight/10000}%)` : '';
-          headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">${cat.name}${w}</th>`;
-        });
-      }
+      displayCategories.forEach(cat => {
+        const w = (cat.weight && cat.weight > 0) ? ` (${cat.weight/10000}%)` : '';
+        headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">${cat.name}${w}</th>`;
+      });
       headerRow.innerHTML += `<th scope="col" class="px-6 py-4 text-center">Overall Grade</th>`;
 
+      // Render Matrix Table Body
       const tbody = document.getElementById('matrixTableBody');
       tbody.innerHTML = '';
 
@@ -390,40 +386,37 @@
         let studentWeightedSum = 0;
         let studentWeightTotal = 0;
 
-        if (categories.length === 0) {
-          if (sData.totalPossible > 0) {
-            const avg = Math.round((sData.totalEarned / sData.totalPossible) * 100);
-            rowHtml += `<td class="px-6 py-4 text-center font-semibold text-slate-700">${avg}%</td>`;
-            studentWeightedSum += avg;
-            studentWeightTotal += 1;
+        displayCategories.forEach(cat => {
+          const catData = sData.categories[cat.id];
+          const weight = cat.weight ? (cat.weight / 10000) : 0;
+          
+          if (!catClassTotals[cat.id]) catClassTotals[cat.id] = { sum: 0, count: 0 };
+
+          if (catData && catData.possible > 0) {
+            const avg = Math.round((catData.earned / catData.possible) * 100);
+            rowHtml += `<td class="px-6 py-4 text-center font-medium">${avg}%</td>`;
+            
+            if (weight > 0) {
+              studentWeightedSum += (avg * weight);
+              studentWeightTotal += weight;
+            }
+
+            catClassTotals[cat.id].sum += avg;
+            catClassTotals[cat.id].count += 1;
           } else {
             rowHtml += `<td class="px-6 py-4 text-center text-slate-400">N/A</td>`;
           }
-        } else {
-          categories.forEach(cat => {
-            const catData = sData.categories[cat.id];
-            const weight = cat.weight ? (cat.weight / 10000) : (100 / categories.length);
-            
-            if (!catClassTotals[cat.id]) catClassTotals[cat.id] = { sum: 0, count: 0 };
+        });
 
-            if (catData && catData.possible > 0) {
-              const avg = Math.round((catData.earned / catData.possible) * 100);
-              rowHtml += `<td class="px-6 py-4 text-center font-medium">${avg}%</td>`;
-              
-              studentWeightedSum += (avg * weight);
-              studentWeightTotal += weight;
-
-              catClassTotals[cat.id].sum += avg;
-              catClassTotals[cat.id].count += 1;
-            } else {
-              rowHtml += `<td class="px-6 py-4 text-center text-slate-400">N/A</td>`;
-            }
-          });
+        // Compute Overall Student Score
+        let finalScore = null;
+        if (studentWeightTotal > 0) {
+          finalScore = Math.round(studentWeightedSum / studentWeightTotal);
+        } else if (sData.totalPossible > 0) {
+          finalScore = Math.round((sData.totalEarned / sData.totalPossible) * 100);
         }
 
-        if (studentWeightTotal > 0) {
-          const finalScore = Math.round((studentWeightedSum / studentWeightTotal));
-
+        if (finalScore !== null) {
           let badgeClass = 'badge-F';
           if (finalScore >= 90) badgeClass = 'badge-A';
           else if (finalScore >= 80) badgeClass = 'badge-B';
@@ -446,7 +439,7 @@
         document.getElementById('summaryClassOverall').innerText = 'N/A';
       }
 
-      renderCategoryCardsAndCharts(categories, catClassTotals);
+      renderCategoryCardsAndCharts(displayCategories, catClassTotals);
     }
 
     function renderCategoryCardsAndCharts(categories, catClassTotals) {
@@ -457,58 +450,16 @@
       const categoryAverages = [];
       const weights = [];
 
-      if (categories.length === 0) {
-        cardsGrid.innerHTML = `<div class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-amber-800 text-xs col-span-3"><i class="fa-solid fa-circle-info mr-1"></i> No explicit grade categories configured in Google Classroom for this course. Showing overall coursework summary.</div>`;
-      } else {
-        categories.forEach(cat => {
-          const weightPercent = cat.weight ? (cat.weight / 10000) : 0;
-          const catStats = catClassTotals[cat.id];
-          const catAvg = (catStats && catStats.count > 0) ? Math.round(catStats.sum / catStats.count) : null;
+      categories.forEach(cat => {
+        const weightPercent = cat.weight ? (cat.weight / 10000) : 0;
+        const catStats = catClassTotals[cat.id];
+        const catAvg = (catStats && catStats.count > 0) ? Math.round(catStats.sum / catStats.count) : null;
 
-          chartLabels.push(cat.name);
-          categoryAverages.push(catAvg || 0);
-          weights.push(weightPercent);
+        chartLabels.push(cat.name);
+        categoryAverages.push(catAvg || 0);
+        weights.push(weightPercent);
 
-          cardsGrid.innerHTML += `
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
-              <div class="flex justify-between items-start mb-2">
-                <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded border border-indigo-100">Weight: ${weightPercent}%</span>
-              </div>
-              <h3 class="text-base font-bold text-slate-800">${cat.name}</h3>
-              <div class="mt-3 text-2xl font-extrabold text-indigo-600">${catAvg !== null ? catAvg + '%' : 'N/A'}</div>
-              <p class="text-xs text-slate-400 mt-1">Class Category Average</p>
-            </div>
-          `;
-        });
-      }
-
-      renderCharts(chartLabels, categoryAverages, weights);
-    }
-
-    function renderCharts(labels, averages, weights) {
-      if(categoryChartInstance) categoryChartInstance.destroy();
-      if(weightChartInstance) weightChartInstance.destroy();
-
-      if (labels.length === 0) {
-        labels = ['General Coursework'];
-        averages = [0];
-        weights = [100];
-      }
-
-      const ctx1 = document.getElementById('categoryChart').getContext('2d');
-      categoryChartInstance = new Chart(ctx1, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Class Category Average (%)', data: averages, backgroundColor: '#6366f1' }] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100, min: 0 } } }
-      });
-
-      const ctx2 = document.getElementById('weightChart').getContext('2d');
-      weightChartInstance = new Chart(ctx2, {
-        type: 'doughnut',
-        data: { labels, datasets: [{ data: weights, backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'] }] },
-        options: { responsive: true, maintainAspectRatio: false }
-      });
-    }
-  </script>
-</body>
-</html>
+        cardsGrid.innerHTML += `
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+            <div class="flex justify-between items-start mb-2">
+              <span class="text-xs font-semibold px-2.5 py-
