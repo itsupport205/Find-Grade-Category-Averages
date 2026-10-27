@@ -86,9 +86,6 @@
       <p id="spinnerText" class="mt-4 text-sm font-medium text-slate-600">Connecting to Google Classroom...</p>
     </div>
 
-    <!-- Diagnostic Banner -->
-    <div id="diagnosticBanner" class="hidden mb-6 p-4 rounded-xl border"></div>
-
     <!-- Results Dashboard -->
     <div id="dashboardResults" class="hidden space-y-8">
       <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -231,7 +228,6 @@
       document.getElementById('logoutBtn').classList.add('hidden');
       document.getElementById('courseSelect').innerHTML = '<option value="">-- Sign in with Google to view courses --</option>';
       document.getElementById('dashboardResults').classList.add('hidden');
-      document.getElementById('diagnosticBanner').classList.add('hidden');
     }
 
     async function calculateGrades() {
@@ -244,9 +240,8 @@
       }
 
       document.getElementById('loadingSpinner').classList.remove('hidden');
-      document.getElementById('spinnerText').innerText = "Fetching course details, roster, assignments, and grades...";
+      document.getElementById('spinnerText').innerText = "Fetching course details, roster, assignments, and complete grade history...";
       document.getElementById('dashboardResults').classList.add('hidden');
-      document.getElementById('diagnosticBanner').classList.add('hidden');
 
       try {
         const courseRes = await gapi.client.classroom.courses.get({ id: courseId });
@@ -262,9 +257,11 @@
         const allSubmissions = [];
         for (const workItem of coursework) {
           try {
+            // Fetch submissions individually for every work item without date restrictions
             const subsRes = await gapi.client.classroom.courses.courseWork.studentSubmissions.list({
               courseId: courseId,
-              courseWorkId: workItem.id
+              courseWorkId: workItem.id,
+              states: ["TURNED_IN", "RETURNED", "NEW", "CREATED", "RECLAIMED_BY_STUDENT"]
             });
             if (subsRes.result.studentSubmissions) {
               allSubmissions.push(...subsRes.result.studentSubmissions);
@@ -289,7 +286,6 @@
       document.getElementById('summaryStudentCount').innerText = students.length;
       document.getElementById('summaryCategoryCount').innerText = categories.length;
 
-      // Track if there are uncategorized assignments in this course
       let hasUncategorizedWork = false;
 
       const workMap = {};
@@ -303,7 +299,6 @@
         };
       });
 
-      // Build full category display list (Official categories + Uncategorized if present)
       const displayCategories = [...categories];
       if (hasUncategorizedWork || categories.length === 0) {
         displayCategories.push({
@@ -332,20 +327,18 @@
         }
       });
 
-      let gradedSubmissionsCount = 0;
-
       submissions.forEach(sub => {
         const workInfo = workMap[sub.courseWorkId];
         const rawUserId = sub.userId;
         const targetStudentId = idToPrimaryMap[rawUserId] || rawUserId;
 
+        // Fall back to assigned grade, draft grade, or live grade
         let rawGrade = sub.assignedGrade;
         if (rawGrade === undefined || rawGrade === null) {
           rawGrade = sub.draftGrade;
         }
 
         if (workInfo && rawGrade !== undefined && rawGrade !== null && studentGrades[targetStudentId]) {
-          gradedSubmissionsCount++;
           const catId = workInfo.categoryId;
           const gradeNum = Number(rawGrade);
 
@@ -462,4 +455,36 @@
         cardsGrid.innerHTML += `
           <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
             <div class="flex justify-between items-start mb-2">
-              <span class="text-xs font-semibold px-2.5 py-
+              <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded border border-indigo-100">${weightPercent > 0 ? 'Weight: ' + weightPercent + '%' : 'Unweighted'}</span>
+            </div>
+            <h3 class="text-base font-bold text-slate-800">${cat.name}</h3>
+            <div class="mt-3 text-2xl font-extrabold text-indigo-600">${catAvg !== null ? catAvg + '%' : 'N/A'}</div>
+            <p class="text-xs text-slate-400 mt-1">Class Category Average</p>
+          </div>
+        `;
+      });
+
+      renderCharts(chartLabels, categoryAverages, weights);
+    }
+
+    function renderCharts(labels, averages, weights) {
+      if(categoryChartInstance) categoryChartInstance.destroy();
+      if(weightChartInstance) weightChartInstance.destroy();
+
+      const ctx1 = document.getElementById('categoryChart').getContext('2d');
+      categoryChartInstance = new Chart(ctx1, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Class Category Average (%)', data: averages, backgroundColor: '#6366f1' }] },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { max: 100, min: 0 } } }
+      });
+
+      const ctx2 = document.getElementById('weightChart').getContext('2d');
+      weightChartInstance = new Chart(ctx2, {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: weights, backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#64748b'] }] },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+  </script>
+</body>
+</html>
