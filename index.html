@@ -10,14 +10,11 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- Google API & Identity Services -->
+  <!-- Google Identity Services & API -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js" async defer></script>
   <style>
-    @media print {
-      .no-print { display: none !important; }
-      body { background: white; color: black; }
-    }
+    @media print { .no-print { display: none !important; } }
     .badge-A { background-color: #dcfce7; color: #166534; border: 1px solid #86efac; }
     .badge-B { background-color: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
     .badge-C { background-color: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
@@ -42,7 +39,7 @@
 
       <!-- Sign In / Sign Out Buttons -->
       <div class="flex items-center gap-3">
-        <button id="loginBtn" onclick="handleAuthClick()" class="bg-white hover:bg-slate-100 text-slate-700 font-semibold text-sm px-4 py-2 rounded-md shadow transition flex items-center gap-2">
+        <button id="loginBtn" type="button" class="bg-white hover:bg-slate-100 text-slate-700 font-semibold text-sm px-4 py-2 rounded-md shadow transition flex items-center gap-2 cursor-pointer">
           <svg class="w-4 h-4" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -51,7 +48,7 @@
           </svg>
           <span id="loginBtnText">Sign in with Google</span>
         </button>
-        <button id="logoutBtn" onclick="handleSignoutClick()" class="hidden bg-slate-600 hover:bg-slate-700 text-white font-medium text-sm px-4 py-2 rounded-md shadow transition flex items-center gap-2">
+        <button id="logoutBtn" type="button" onclick="handleSignoutClick()" class="hidden bg-slate-600 hover:bg-slate-700 text-white font-medium text-sm px-4 py-2 rounded-md shadow transition flex items-center gap-2 cursor-pointer">
           <i class="fa-solid fa-right-from-bracket"></i> Sign Out
         </button>
       </div>
@@ -76,7 +73,7 @@
           </div>
         </div>
         <div class="flex items-end gap-3">
-          <button id="calcBtn" onclick="calculateGrades()" class="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-3 rounded-lg shadow-sm transition flex items-center justify-center gap-2 text-sm">
+          <button id="calcBtn" onclick="calculateGrades()" class="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-3 rounded-lg shadow-sm transition flex items-center justify-center gap-2 text-sm cursor-pointer">
             <i class="fa-solid fa-calculator"></i> Calculate Category Averages
           </button>
         </div>
@@ -160,8 +157,13 @@
     let categoryChartInstance = null;
     let weightChartInstance = null;
 
-    function initTokenClient() {
-      if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+    function triggerGoogleLogin() {
+      if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+        alert("Google Authentication script has not finished loading or is blocked by an ad-blocker. Please refresh the page or disable browser extensions.");
+        return;
+      }
+
+      if (!tokenClient) {
         tokenClient = google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID,
           scope: SCOPES,
@@ -171,25 +173,16 @@
               document.getElementById('logoutBtn').classList.remove('hidden');
               await initGapiAndFetchCourses(tokenResponse);
             } else {
-              alert("Sign-in request was cancelled or failed.");
+              alert("Sign-in cancelled or failed.");
             }
           },
         });
       }
-    }
-
-    function handleAuthClick() {
-      if (!tokenClient) {
-        initTokenClient();
-      }
-
-      if (!tokenClient) {
-        alert("Google Identity Client is still initializing. Please wait 2 seconds and click Sign In again.");
-        return;
-      }
 
       tokenClient.requestAccessToken({ prompt: 'select_account consent' });
     }
+
+    document.getElementById('loginBtn').addEventListener('click', triggerGoogleLogin);
 
     async function initGapiAndFetchCourses(tokenResponse) {
       document.getElementById('loadingSpinner').classList.remove('hidden');
@@ -205,10 +198,7 @@
         });
         gapi.client.setToken(tokenResponse);
 
-        const response = await gapi.client.classroom.courses.list({
-          courseStates: 'ACTIVE'
-        });
-
+        const response = await gapi.client.classroom.courses.list({ courseStates: 'ACTIVE' });
         const courses = response.result.courses || [];
         const select = document.getElementById('courseSelect');
         select.innerHTML = '<option value="">-- Select a Course --</option>';
@@ -221,12 +211,11 @@
             select.appendChild(opt);
           });
         } else {
-          select.innerHTML = '<option value="">No active Google Classroom courses found for this account.</option>';
+          select.innerHTML = '<option value="">No active Google Classroom courses found.</option>';
         }
       } catch (err) {
         console.error("Error loading courses:", err);
-        const errorDetails = err.result?.error?.message || err.message || JSON.stringify(err);
-        alert("Google API Error: " + errorDetails);
+        alert("Google API Error: " + (err.result?.error?.message || err.message));
       }
 
       document.getElementById('loadingSpinner').classList.add('hidden');
@@ -255,7 +244,7 @@
       }
 
       document.getElementById('loadingSpinner').classList.remove('hidden');
-      document.getElementById('spinnerText').innerText = "Fetching course details, student roster, assignments, and grades...";
+      document.getElementById('spinnerText').innerText = "Fetching course details, roster, assignments, and grades...";
       document.getElementById('dashboardResults').classList.add('hidden');
       document.getElementById('diagnosticBanner').classList.add('hidden');
 
@@ -288,8 +277,7 @@
         computeAndRenderMatrix(course, categories, students, coursework, allSubmissions);
       } catch (err) {
         console.error("Error calculating grade matrix:", err);
-        const errorMsg = err.result?.error?.message || err.message || "Failed to calculate grades.";
-        alert("Error loading grade matrix: " + errorMsg);
+        alert("Error loading grade matrix: " + (err.result?.error?.message || err.message));
       }
 
       document.getElementById('loadingSpinner').classList.add('hidden');
@@ -303,7 +291,6 @@
 
       for (const cat of categories) {
         const catLower = (cat.name || '').toLowerCase();
-        
         if (titleLower.includes(catLower)) return cat.id;
 
         if ((catLower.includes('homework') || catLower.includes('hw')) && (titleLower.includes('hw') || titleLower.includes('homework') || titleLower.includes('pce'))) return cat.id;
@@ -522,10 +509,6 @@
         options: { responsive: true, maintainAspectRatio: false }
       });
     }
-
-    window.onload = function() {
-      initTokenClient();
-    };
   </script>
 </body>
 </html>
